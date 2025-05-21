@@ -145,6 +145,166 @@ export default function Dashboard() {
     setEmailSent(false);
     
     try {
+      // Create mock data for demo purposes
+      const mockScanResults = {
+        projectId: project.id,
+        overallScore: Math.floor(Math.random() * (85 - 65) + 65), // Random score between 65-85
+        totalIssues: Math.floor(Math.random() * 15) + 5, // Random number of issues between 5-20
+        detailedAnalysis: [
+          {
+            filePath: 'index.html',
+            score: Math.floor(Math.random() * (90 - 60) + 60),
+            sections: [
+              {
+                name: 'Head Section',
+                issues: [
+                  {
+                    type: 'title',
+                    element: '<title>Home Page</title>',
+                    issue: 'Title is too generic',
+                    suggestion: 'Update page title to include primary keywords',
+                    severity: 'medium'
+                  },
+                  {
+                    type: 'meta',
+                    element: '<meta name="description" content="Welcome to our website">',
+                    issue: 'Meta description is too short and generic',
+                    suggestion: 'Add a compelling meta description with call-to-action and keywords',
+                    severity: 'high'
+                  }
+                ]
+              },
+              {
+                name: 'Body Section',
+                issues: [
+                  {
+                    type: 'h1',
+                    element: '<h1>Welcome</h1>',
+                    issue: 'H1 is not descriptive enough',
+                    suggestion: 'Make heading more descriptive and include primary keyword',
+                    severity: 'medium'
+                  },
+                  {
+                    type: 'img',
+                    element: '<img src="header.jpg">',
+                    issue: 'Missing alt text on image',
+                    suggestion: 'Add descriptive alt text to improve accessibility and SEO',
+                    severity: 'high'
+                  }
+                ]
+              }
+            ],
+            keywords: {
+              current: ['home', 'welcome', 'website'],
+              suggested: ['seo optimization', 'digital marketing', 'web development', 'search engine', 'ranking']
+            }
+          },
+          {
+            filePath: 'about.html',
+            score: Math.floor(Math.random() * (90 - 60) + 60),
+            sections: [
+              {
+                name: 'Head Section',
+                issues: [
+                  {
+                    type: 'title',
+                    element: '<title>About Us</title>',
+                    issue: 'Title could be more descriptive',
+                    suggestion: 'Update title to include company name and value proposition',
+                    severity: 'medium'
+                  }
+                ]
+              },
+              {
+                name: 'Body Section',
+                issues: [
+                  {
+                    type: 'content',
+                    element: '<p>We are a company...</p>',
+                    issue: 'Content is too thin',
+                    suggestion: 'Add more detailed content about your company, mission, and services',
+                    severity: 'medium'
+                  }
+                ]
+              }
+            ],
+            keywords: {
+              current: ['about', 'company', 'team'],
+              suggested: ['company history', 'team expertise', 'industry leadership', 'mission statement', 'values']
+            }
+          },
+          {
+            filePath: 'contact.html',
+            score: Math.floor(Math.random() * (90 - 60) + 60),
+            sections: [
+              {
+                name: 'Head Section',
+                issues: [
+                  {
+                    type: 'meta',
+                    element: '<meta name="description" content="Contact us">',
+                    issue: 'Meta description is too short',
+                    suggestion: 'Expand meta description to include location and contact methods',
+                    severity: 'medium'
+                  }
+                ]
+              }
+            ],
+            keywords: {
+              current: ['contact', 'email', 'phone'],
+              suggested: ['get in touch', 'customer support', 'help desk', 'business hours', 'location']
+            }
+          }
+        ]
+      };
+
+      // For demo, just use mock data
+      if (process.env.NEXT_PUBLIC_USING_API_KEYS !== 'true') {
+        // Calculate total issues
+        const totalIssues = mockScanResults.detailedAnalysis.reduce((sum, page) => 
+          sum + page.sections.reduce((sectionSum, section) => sectionSum + section.issues.length, 0), 0);
+          
+        mockScanResults.totalIssues = totalIssues;
+        
+        // Update the project with scan results
+        const updatedProjects = projects.map(p => {
+          if (p.id === project.id) {
+            return {
+              ...p,
+              lastScan: new Date().toISOString(),
+              seoScore: mockScanResults.overallScore,
+              suggestions: totalIssues,
+            };
+          }
+          return p;
+        });
+        
+        // Store scan results for display in the modal
+        setScanResults(mockScanResults);
+        
+        setProjects(updatedProjects);
+        if (searchTerm.trim() === "") {
+          setFilteredProjects(updatedProjects);
+        } else {
+          const filtered = updatedProjects.filter(p => 
+            p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            p.githubRepo.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+          setFilteredProjects(filtered);
+        }
+        
+        // Show details modal
+        setSelectedUrl(project.url);
+        setDetailsModal(true);
+        
+        // Simulate email report
+        if (session?.user?.email) {
+          setEmailSent(true);
+        }
+        
+        return;
+      }
+
       // Get HTML files from the repository
       const htmlFiles = await getHtmlFiles(
         session as any,
@@ -863,20 +1023,58 @@ These changes should help improve your site's SEO score and search engine rankin
             ) : changesModal ? (
               <div className="border rounded p-4 bg-gray-50">
                 <p className="font-medium mb-2">Suggested Changes:</p>
-                <ul className="text-sm text-gray-700 space-y-2">
-                  <li className="flex items-start">
-                    <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">Title</span>
-                    Update page title to include primary keywords
-                  </li>
-                  <li className="flex items-start">
-                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">Meta</span>
-                    Improve meta description with call-to-action
-                  </li>
-                  <li className="flex items-start">
-                    <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">H1</span>
-                    Make heading more descriptive and keyword-rich
-                  </li>
-                </ul>
+                {scanResults ? (
+                  <div className="space-y-6">
+                    {scanResults.detailedAnalysis.map((page: any, pageIdx: number) => (
+                      <div key={pageIdx} className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                        <h4 className="font-medium text-md mb-2">{page.filePath}</h4>
+                        <ul className="text-sm text-gray-700 space-y-3">
+                          {page.sections.flatMap((section: any, sIdx: number) => 
+                            section.issues.map((issue: any, iIdx: number) => (
+                              <li key={`${pageIdx}-${sIdx}-${iIdx}`} className="flex items-start">
+                                <span className={`
+                                  text-xs px-2 py-0.5 rounded mr-2 mt-0.5 
+                                  ${issue.type === 'title' ? 'bg-green-100 text-green-800' : 
+                                    issue.type === 'meta' ? 'bg-blue-100 text-blue-800' : 
+                                    issue.type === 'h1' ? 'bg-purple-100 text-purple-800' : 
+                                    issue.type === 'img' ? 'bg-amber-100 text-amber-800' :
+                                    'bg-gray-100 text-gray-800'}
+                                `}>
+                                  {issue.type}
+                                </span>
+                                <div className="flex-1">
+                                  <div className="text-red-600 font-medium mb-1">{issue.issue}</div>
+                                  <div className="bg-gray-100 p-1.5 rounded text-xs font-mono mb-1.5 overflow-x-auto">
+                                    {issue.element}
+                                  </div>
+                                  <div className="text-green-600 text-sm flex">
+                                    <ArrowRight className="h-4 w-4 mr-1.5 flex-shrink-0 mt-0.5" />
+                                    {issue.suggestion}
+                                  </div>
+                                </div>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ul className="text-sm text-gray-700 space-y-2">
+                    <li className="flex items-start">
+                      <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">Title</span>
+                      Update page title to include primary keywords
+                    </li>
+                    <li className="flex items-start">
+                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">Meta</span>
+                      Improve meta description with call-to-action
+                    </li>
+                    <li className="flex items-start">
+                      <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded mr-2 mt-0.5">H1</span>
+                      Make heading more descriptive and keyword-rich
+                    </li>
+                  </ul>
+                )}
               </div>
             ) : (
               <div className="border rounded p-4 bg-gray-50">

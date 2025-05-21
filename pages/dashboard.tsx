@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [scanResults, setScanResults] = useState<any>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [isMockMode] = useState<boolean>(process.env.NEXT_PUBLIC_USING_API_KEYS !== 'true');
   
   // Fetch repositories when session is available
   useEffect(() => {
@@ -422,6 +423,16 @@ These changes should help improve your site's SEO score and search engine rankin
             </button>
           </div>
         </div>
+        
+        {isMockMode && (
+          <div className="mb-6 p-4 bg-yellow-50 text-yellow-600 rounded-md flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            <p>Running in demo mode with mocked data. Email sending and OpenAI analysis are simulated. Set up API keys in the .env.local file for full functionality.</p>
+            <button onClick={() => setError(null)} className="ml-auto text-yellow-500 hover:text-yellow-700">
+              Dismiss
+            </button>
+          </div>
+        )}
         
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-md flex items-center">

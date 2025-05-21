@@ -1,7 +1,18 @@
 import { Resend } from 'resend';
 
-// Initialize Resend client with API key
-const resend = new Resend(process.env.RESEND_API_KEY || '');
+// Initialize Resend client with API key or use a mock implementation
+let resendClient: Resend | null = null;
+const isMockMode = !process.env.RESEND_API_KEY;
+
+try {
+  if (process.env.RESEND_API_KEY) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  } else {
+    console.warn('RESEND_API_KEY not found in environment variables. Email sending will be mocked.');
+  }
+} catch (error) {
+  console.error('Failed to initialize Resend client:', error);
+}
 
 // Interface for SEO report data
 interface SeoReportData {
@@ -36,6 +47,13 @@ export async function sendSeoReport(
   data: SeoReportData
 ): Promise<boolean> {
   try {
+    // If we're in mock mode or client failed to initialize, log the email and return success
+    if (isMockMode || !resendClient) {
+      console.log(`[MOCK EMAIL] Would send SEO report to ${to} for project ${data.projectName}`);
+      console.log(`[MOCK EMAIL] SEO Score: ${data.overallScore}, Issues: ${data.totalIssues}`);
+      return true;
+    }
+
     // Create a color indicator for the SEO score
     const scoreColor = data.overallScore >= 80 
       ? '#4ade80' // green for good score
@@ -55,8 +73,8 @@ export async function sendSeoReport(
         <div style="padding: 12px;">
           <p><strong>Top Issues:</strong></p>
           <ul style="margin-top: 8px; padding-left: 20px;">
-            ${page.sections.flatMap(section => 
-              section.issues.map(issue => 
+            ${page.sections.flatMap((section: { name: string; issues: Array<{ type: string; issue: string; suggestion: string }> }) => 
+              section.issues.map((issue: { type: string; issue: string; suggestion: string }) => 
                 `<li style="margin-bottom: 8px;">
                   <span style="display: inline-block; background-color: #e0f2fe; color: #0369a1; border-radius: 4px; padding: 2px 6px; font-size: 12px; margin-right: 6px;">${issue.type}</span>
                   <span style="color: #dc2626;">${issue.issue}</span>
@@ -72,7 +90,7 @@ export async function sendSeoReport(
     `).join('');
 
     // Send the email
-    const { data: response, error } = await resend.emails.send({
+    const { data: response, error } = await resendClient.emails.send({
       from: 'SEO Automation <seo-automation@example.com>',
       to: [to],
       subject: `SEO Analysis Report for ${data.projectName}`,

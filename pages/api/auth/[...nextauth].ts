@@ -24,50 +24,49 @@ declare module "next-auth/jwt" {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Configure one or more authentication providers
   providers: [
     GithubProvider({
       clientId: process.env.GITHUB_ID || "",
       clientSecret: process.env.GITHUB_SECRET || "",
-      // GitHub scopes need to be in the authorization configuration
       authorization: {
         params: {
-          scope: "read:user user:email repo",
+          scope: 'read:user user:email repo',
         },
       },
     }),
+    // Keeping Google provider as a secondary option
     GoogleProvider({
-      clientId: process.env.GOOGLE_ID || "",
-      clientSecret: process.env.GOOGLE_SECRET || "",
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
   ],
-  // Removing the Supabase adapter and using JWT only
+  debug: true,
   session: {
     strategy: "jwt",
   },
   callbacks: {
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.sub!;
-        // Add the access token to the session
-        session.accessToken = token.accessToken;
-      }
-      return session;
-    },
-    async jwt({ token, user, account }) {
-      if (account && account.provider === "github") {
+    async jwt({ token, account }) {
+      // Persist the OAuth access_token to the token right after signin
+      if (account) {
         token.accessToken = account.access_token;
-      }
-      if (user) {
-        token.uid = user.id;
       }
       return token;
     },
+    async session({ session, token }) {
+      // Send properties to the client, like an access_token from a provider.
+      session.accessToken = token.accessToken;
+      return session;
+    },
+  },
+  theme: {
+    colorScheme: "auto", // "auto" | "dark" | "light"
+    brandColor: "#0070f3", // Hex color code
+    logo: "/logo.png", // Absolute URL to image
   },
   pages: {
-    signIn: "/auth/signin",
-    error: "/auth/error",
+    signIn: '/auth/signin',
   },
-  debug: process.env.NODE_ENV === "development",
 };
 
 export default NextAuth(authOptions); 

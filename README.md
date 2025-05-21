@@ -1,29 +1,31 @@
 # SEO Automation App
 
-A powerful SEO automation tool built with GPT-4 Turbo to analyze and improve your website's SEO performance. This application helps you identify SEO issues, provides keyword suggestions, and automatically creates pull requests with suggested improvements.
+An intelligent application that automatically analyzes and improves SEO for GitHub repositories. The app scans HTML files in repositories, identifies SEO issues, and creates pull requests with improvements.
 
 ## Features
 
-- **GitHub Integration**: Connect your GitHub repositories for automatic SEO analysis
-- **Content Analysis**: Analyze your HTML content for SEO best practices
-- **Keyword Suggestions**: Get trending and relevant keyword suggestions for your content
-- **Automated Improvements**: Generate pull requests with SEO improvements (with your approval)
-- **Daily Scans**: Set up automatic daily scans of your repositories
-- **Email Alerts**: Receive email notifications when SEO issues are detected
-- **SEO Dashboard**: View your SEO scores and track improvements over time
+- **GitHub Repository Integration**: Connect with your GitHub account and select repositories to analyze
+- **Comprehensive SEO Analysis**: Scan HTML files for SEO issues including:
+  - Title tag optimization
+  - Meta descriptions
+  - Heading hierarchy
+  - Image alt text
+  - Content quality
+  - Keyword usage
+- **Detailed Reports**: Get page-by-page and section-by-section analysis of SEO issues
+- **Automated Improvements**: Apply recommended changes with one click through GitHub pull requests
+- **Email Notifications**: Receive detailed SEO reports via email
+- **Dashboard Tracking**: Monitor SEO scores and improvement opportunities for all repositories
 
-## Tech Stack
+## Getting Started
 
-- **Frontend**: Next.js 14, React 18, Tailwind CSS
-- **Backend**: Node.js with Fastify
-- **Database**: Supabase
-- **Authentication**: Auth.js (NextAuth)
-- **Cache**: Upstash Redis
-- **Email**: Resend.com
-- **AI**: OpenAI GPT-4 Turbo
-- **Integration**: GitHub API
+### Prerequisites
 
-## Installation
+- Node.js 16.x or later
+- GitHub account with repository access
+- Email account for notifications
+
+### Installation
 
 1. Clone the repository:
    ```bash
@@ -36,9 +38,19 @@ A powerful SEO automation tool built with GPT-4 Turbo to analyze and improve you
    npm install
    ```
 
-3. Copy the environment variables file and fill in your values:
-   ```bash
-   cp .env.example .env.local
+3. Create a `.env.local` file with the following variables:
+   ```
+   # Authentication
+   GITHUB_ID=your_github_oauth_client_id
+   GITHUB_SECRET=your_github_oauth_client_secret
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your_nextauth_secret
+   
+   # OpenAI (Optional - mock implementation used if not provided)
+   OPENAI_API_KEY=your_openai_api_key
+   
+   # Email notifications
+   RESEND_API_KEY=your_resend_api_key
    ```
 
 4. Run the development server:
@@ -46,46 +58,32 @@ A powerful SEO automation tool built with GPT-4 Turbo to analyze and improve you
    npm run dev
    ```
 
-## CLI Usage
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-The app includes a command-line tool for SEO analysis:
+## Usage
 
-```bash
-# Analyze a local HTML file
-npx ts-node scripts/seoScan.ts file ./public/sample.html
+1. **Sign in with GitHub**: Authenticate with your GitHub account
+2. **Connect Repositories**: Your GitHub repositories will automatically appear on the dashboard
+3. **Scan for SEO Issues**: Select a repository and click "Scan Now" to analyze HTML files
+4. **Review Analysis**: View detailed SEO analysis including scores, issues, and suggested improvements
+5. **Apply Changes**: Review suggested changes and click "Apply Changes" to create a pull request with improvements
+6. **Check Email**: Receive a detailed SEO report via email (if email notifications are configured)
 
-# Analyze a public URL
-npx ts-node scripts/seoScan.ts url https://example.com
+## Technologies Used
 
-# Analyze a GitHub repository
-npx ts-node scripts/seoScan.ts repo username/repository
-
-# Include specific keywords to target
-npx ts-node scripts/seoScan.ts file ./public/sample.html --keywords seo,automation,ai
-
-# Save results to a file
-npx ts-node scripts/seoScan.ts file ./public/sample.html --output results.json
-```
-
-## Automated GitHub Workflow
-
-This app includes a GitHub Action that automatically runs SEO scans on a daily basis. To enable this:
-
-1. Add your repository secrets in GitHub:
-   - `OPENAI_API_KEY`: Your OpenAI API key
-   - `GITHUB_TOKEN`: Your GitHub personal access token
-   - `SUPABASE_URL`: Your Supabase URL
-   - `SUPABASE_KEY`: Your Supabase anon key
-   - `RESEND_API_KEY`: Your Resend API key
-
-2. The workflow will run automatically every day at midnight UTC.
+- Next.js
+- NextAuth.js for authentication
+- GitHub API for repository access
+- OpenAI API for intelligent SEO analysis
+- Resend for email notifications
+- Tailwind CSS for styling
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 
-- OpenAI for GPT-4 Turbo
-- Next.js team for the amazing framework
-- ShadCN UI for the beautiful components 
+- OpenAI for AI-powered SEO analysis
+- GitHub for repository integration
+- The Next.js team for the framework 

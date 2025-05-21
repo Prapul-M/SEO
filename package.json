@@ -12,6 +12,7 @@
     "@auth/supabase-adapter": "^1.0.0",
     "@octokit/rest": "^20.0.1",
     "@shadcn/ui": "latest",
+    "@supabase/supabase-js": "^2.49.7",
     "@upstash/redis": "^1.25.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",

@@ -105,13 +105,8 @@ export default function Home() {
                   </button>
                 )}
               </div>
-              <div className="relative h-60 rounded-lg overflow-hidden">
-                <Image 
-                  src="/dashboard-preview.png" 
-                  alt="Dashboard Preview" 
-                  fill 
-                  className="object-cover"
-                />
+              <div className="relative h-60 rounded-lg overflow-hidden bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
+                <div className="text-white text-xl font-bold">SEO Dashboard Preview</div>
               </div>
             </div>
           </div>

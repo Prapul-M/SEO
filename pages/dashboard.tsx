@@ -15,6 +15,7 @@ import {
 import Header from "@/components/Header";
 import Link from "next/link";
 import SeoScoreDashboard from '../components/SeoScoreDashboard';
+import Image from "next/image";
 
 export default function Dashboard() {
   const { data: session, status } = useSession();

@@ -1,17 +1,30 @@
 import { Octokit } from "@octokit/rest";
 import { Session } from "next-auth";
 
+// Extend the Session type to include the properties we need
+interface ExtendedSession extends Session {
+  accessToken?: string;
+  token?: {
+    accessToken?: string;
+  };
+}
+
 // Initialize Octokit client
 let octokit: Octokit | null = null;
 
 // Get authenticated Octokit client
-export async function getOctokit(session: Session): Promise<Octokit> {
+export async function getOctokit(session: ExtendedSession): Promise<Octokit> {
   // If we have a cached client with a valid token, use it
   if (octokit) return octokit;
 
   // Get the token from session
-  const accessToken = session.accessToken as string;
+  // First check for token in the right format after our JWT updates
+  const accessToken = session.accessToken || 
+                     session.token?.accessToken || 
+                     process.env.GITHUB_TOKEN;
+                     
   if (!accessToken) {
+    console.error("No GitHub token found in session or env variables:", session);
     throw new Error("GitHub token not found in session");
   }
 
@@ -32,7 +45,7 @@ export interface GithubRepo {
 
 // Get user's repositories
 export async function getUserRepositories(
-  session: Session
+  session: ExtendedSession
 ): Promise<GithubRepo[]> {
   const client = await getOctokit(session);
 
@@ -56,7 +69,7 @@ export async function getUserRepositories(
 
 // Get content of a file
 export async function getFileContent(
-  session: Session,
+  session: ExtendedSession,
   owner: string,
   repo: string,
   path: string,
@@ -86,7 +99,7 @@ export async function getFileContent(
 
 // Create a new branch
 export async function createBranch(
-  session: Session,
+  session: ExtendedSession,
   owner: string,
   repo: string,
   baseBranch: string,
@@ -117,7 +130,7 @@ export async function createBranch(
 
 // Update a file in a repository
 export async function updateFile(
-  session: Session,
+  session: ExtendedSession,
   owner: string,
   repo: string,
   path: string,
@@ -146,7 +159,7 @@ export async function updateFile(
 
 // Create a pull request
 export async function createPullRequest(
-  session: Session,
+  session: ExtendedSession,
   owner: string,
   repo: string,
   head: string,
@@ -175,7 +188,7 @@ export async function createPullRequest(
 
 // Get all HTML files in a repository
 export async function getHtmlFiles(
-  session: Session,
+  session: ExtendedSession,
   owner: string,
   repo: string,
   path: string = "",

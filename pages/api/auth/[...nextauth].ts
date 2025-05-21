@@ -12,6 +12,7 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
     };
+    accessToken?: string;
   }
 }
 
@@ -47,6 +48,8 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.sub!;
+        // Add the access token to the session
+        session.accessToken = token.accessToken;
       }
       return session;
     },

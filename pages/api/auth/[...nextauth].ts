@@ -66,6 +66,12 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/auth/signin',
+    newUser: '/auth/repository-selection',
+  },
+  events: {
+    async signIn({ user, account, isNewUser }) {
+      console.log('User signed in:', user.name);
+    },
   },
 };
 

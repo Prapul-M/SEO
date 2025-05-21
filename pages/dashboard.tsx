@@ -21,6 +21,7 @@ import Image from "next/image";
 import { getUserRepositories, GithubRepo, getHtmlFiles, getFileContent, createBranch, updateFile, createPullRequest } from "@/lib/github";
 import { sendSeoReport } from "@/lib/email";
 import { analyzeSeoWithAI } from "@/lib/openai";
+import { useRouter } from "next/router";
 
 // Define our project interface
 interface Project {
@@ -39,6 +40,7 @@ interface Project {
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("projects");
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
@@ -53,13 +55,34 @@ export default function Dashboard() {
   const [scanResults, setScanResults] = useState<any>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [isMockMode] = useState<boolean>(process.env.NEXT_PUBLIC_USING_API_KEYS !== 'true');
+  const [selectedRepository, setSelectedRepository] = useState<GithubRepo | null>(null);
   
-  // Fetch repositories when session is available
+  // Check if a repository is selected and redirect if not
   useEffect(() => {
-    if (session && session.user) {
-      fetchUserRepositories();
+    if (status === 'authenticated') {
+      const storedRepo = localStorage.getItem('selectedRepository');
+      
+      if (!storedRepo) {
+        router.push('/auth/repository-selection');
+      } else {
+        try {
+          const repoData = JSON.parse(storedRepo) as GithubRepo;
+          setSelectedRepository(repoData);
+        } catch (err) {
+          console.error('Error parsing stored repository data:', err);
+          localStorage.removeItem('selectedRepository');
+          router.push('/auth/repository-selection');
+        }
+      }
     }
-  }, [session]);
+  }, [status, router]);
+  
+  // Load only the selected repository instead of all repositories
+  useEffect(() => {
+    if (session && session.user && selectedRepository) {
+      loadSelectedRepository();
+    }
+  }, [session, selectedRepository]);
 
   // Filter projects based on search term
   useEffect(() => {
@@ -74,29 +97,47 @@ export default function Dashboard() {
     }
   }, [searchTerm, projects]);
 
-  const fetchUserRepositories = async () => {
+  const loadSelectedRepository = async () => {
+    if (!selectedRepository) return;
+    
     setLoading(true);
     setError(null);
+    
     try {
-      const repos = await getUserRepositories(session as any);
-      const projectsList = repos.map((repo) => ({
-        id: `${repo.owner}/${repo.repo}`,
-        name: repo.repo,
-        url: `https://github.com/${repo.owner}/${repo.repo}`,
-        githubRepo: `${repo.owner}/${repo.repo}`,
-        owner: repo.owner,
-        repo: repo.repo,
-        defaultBranch: repo.defaultBranch,
-        selected: false
-      }));
-      setProjects(projectsList);
-      setFilteredProjects(projectsList);
+      const project: Project = {
+        id: `${selectedRepository.owner}/${selectedRepository.repo}`,
+        name: selectedRepository.repo,
+        url: `https://github.com/${selectedRepository.owner}/${selectedRepository.repo}`,
+        githubRepo: `${selectedRepository.owner}/${selectedRepository.repo}`,
+        owner: selectedRepository.owner,
+        repo: selectedRepository.repo,
+        defaultBranch: selectedRepository.defaultBranch,
+        selected: true
+      };
+      
+      setProjects([project]);
+      setFilteredProjects([project]);
+      setSelectedProjectId(project.id);
     } catch (err) {
-      console.error("Failed to fetch repositories:", err);
-      setError("Failed to fetch your GitHub repositories. Please try again later.");
+      console.error("Failed to load repository:", err);
+      setError("Failed to load your selected GitHub repository. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangeRepository = () => {
+    localStorage.removeItem('selectedRepository');
+    router.push('/auth/repository-selection');
+  };
+
+  const fetchUserRepositories = async () => {
+    if (selectedRepository) {
+      loadSelectedRepository();
+      return;
+    }
+    
+    router.push('/auth/repository-selection');
   };
 
   const handleRunScan = async (project: Project) => {
@@ -283,18 +324,42 @@ export default function Dashboard() {
   };
 
   const handleApplyChanges = async () => {
-    if (!selectedUrl || !scanResults) return;
+    if (!selectedUrl || !scanResults) {
+      setError("No scan results available. Please run a scan first.");
+      return;
+    }
     
     // Find the project
     const project = projects.find(p => p.url === selectedUrl);
-    if (!project) return;
+    if (!project) {
+      setError("Selected project not found. Please try again.");
+      return;
+    }
     
     try {
+      setLoading(true);
       const appliedChanges = [];
+      
+      // Generate a unique branch name with timestamp
+      const timestamp = new Date().getTime();
+      const branchName = `seo-improvements-${timestamp}`;
+      
+      // Create a new branch for all the changes
+      console.log(`Creating branch: ${branchName}`);
+      await createBranch(
+        session as any,
+        project.owner,
+        project.repo,
+        project.defaultBranch,
+        branchName
+      );
+      console.log(`Branch ${branchName} created successfully`);
       
       // For each file in the detailed analysis
       for (const page of scanResults.detailedAnalysis) {
         try {
+          console.log(`Processing file: ${page.filePath}`);
+          
           // Get the current file content
           const originalContent = await getFileContent(
             session as any,
@@ -304,18 +369,9 @@ export default function Dashboard() {
             project.defaultBranch
           );
           
-          // Create a new branch for the changes
-          const branchName = `seo-improvements-${new Date().getTime()}`;
-          await createBranch(
-            session as any,
-            project.owner,
-            project.repo,
-            project.defaultBranch,
-            branchName
-          );
+          console.log(`Retrieved original content for ${page.filePath} (SHA: ${originalContent.sha.slice(0, 7)})`);
           
           // Apply the SEO improvements
-          // The updateFile function already includes the applySeoImprovements logic
           const updateResult = await updateFile(
             session as any,
             project.owner,
@@ -328,50 +384,70 @@ export default function Dashboard() {
           );
           
           if (updateResult) {
+            console.log(`Successfully updated ${page.filePath} in branch ${branchName}`);
             appliedChanges.push({
               file: page.filePath,
               branch: branchName
             });
-            
-            // Create a pull request with the changes
-            const prUrl = await createPullRequest(
-              session as any,
-              project.owner,
-              project.repo,
-              branchName,
-              project.defaultBranch,
-              `SEO Improvements for ${page.filePath}`,
-              `This PR includes automated SEO improvements for better search engine visibility.
-              
-## Changes applied based on analysis:
-${page.sections.flatMap((section: { name: string; issues: Array<{ type: string; suggestion: string }> }) => 
-  section.issues.map((issue: { type: string; suggestion: string }) => 
-    `- **${issue.type}**: ${issue.suggestion}`
-  )
-).join('\n')}
-
-These changes should help improve your site's SEO score and search engine rankings.`
-            );
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error(`Error applying changes to ${page.filePath}:`, err);
+          // Continue with other files even if one fails
         }
       }
       
-      // Show success message
+      // Create a pull request if there were any successful changes
       if (appliedChanges.length > 0) {
-        setError(null);
-        alert(`Changes applied successfully to ${appliedChanges.length} files! Pull requests have been created with your SEO improvements.`);
+        try {
+          // Create a comprehensive PR with all the changes
+          console.log(`Creating pull request for branch ${branchName}`);
+          const prUrl = await createPullRequest(
+            session as any,
+            project.owner,
+            project.repo,
+            branchName,
+            project.defaultBranch,
+            `SEO Improvements for ${project.repo}`,
+            `This PR includes automated SEO improvements for better search engine visibility.
+            
+## Improved Files:
+${appliedChanges.map(change => `- ${change.file}`).join('\n')}
+
+## Changes Applied:
+${scanResults.detailedAnalysis.flatMap((page: any) => 
+  page.sections.flatMap((section: { name: string; issues: Array<{ type: string; suggestion: string }> }) => 
+    section.issues.map((issue: { type: string; suggestion: string }) => 
+      `- **${issue.type}**: ${issue.suggestion}`
+    )
+  )
+).slice(0, 15).join('\n')}
+${scanResults.detailedAnalysis.flatMap((page: any) => 
+  page.sections.flatMap((section: { name: string; issues: Array<any> }) => section.issues)
+).length > 15 ? '\n\n...and more improvements' : ''}
+
+These changes should help improve your site's SEO score and search engine rankings.`
+          );
+          
+          console.log(`Pull request created: ${prUrl}`);
+          
+          // Show success message with PR URL
+          setError(null);
+          setChangesModal(false);
+          alert(`Changes applied successfully to ${appliedChanges.length} files! A pull request has been created.`);
+        } catch (prError: any) {
+          console.error("Error creating pull request:", prError);
+          setError(`Changes were applied to ${appliedChanges.length} files, but creating a pull request failed: ${prError.message}`);
+        }
       } else {
-        setError("Failed to apply any changes. Please try again later.");
+        setError("No changes were applied. The files may already have good SEO or there might have been an error.");
       }
-      
+    } catch (err: any) {
+      console.error("Failed to apply SEO changes:", err);
+      setError(`Failed to apply SEO changes: ${err.message}`);
+    } finally {
+      setLoading(false);
       // Close the modal
       handleCloseModal();
-      
-    } catch (err) {
-      console.error("Failed to apply SEO changes:", err);
-      setError("Failed to apply SEO changes. Please try again later.");
     }
   };
 
@@ -379,7 +455,7 @@ These changes should help improve your site's SEO score and search engine rankin
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
-        <p className="ml-3 text-lg">Loading your projects...</p>
+        <p className="ml-3 text-lg">Loading your project...</p>
       </div>
     );
   }
@@ -403,23 +479,36 @@ These changes should help improve your site's SEO score and search engine rankin
       
       <main className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            {selectedRepository && (
+              <p className="text-muted-foreground mt-1">
+                Selected repository: <span className="font-medium">{selectedRepository.owner}/{selectedRepository.repo}</span>
+                <button 
+                  onClick={handleChangeRepository}
+                  className="ml-2 text-primary text-sm hover:underline"
+                >
+                  Change
+                </button>
+              </p>
+            )}
+          </div>
           <div className="flex items-center gap-4">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search projects..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 py-2 pr-4 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <button 
-              onClick={fetchUserRepositories}
+              onClick={loadSelectedRepository}
               className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              <Plus className="mr-2 h-4 w-4" /> Refresh Projects
+              <Plus className="mr-2 h-4 w-4" /> Refresh
             </button>
           </div>
         </div>

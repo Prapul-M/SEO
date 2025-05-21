@@ -37,7 +37,7 @@ export default function SignIn({ providers }: SignInProps) {
           {Object.values(providers).map((provider) => (
             <button
               key={provider.id}
-              onClick={() => signIn(provider.id, { callbackUrl: "/" })}
+              onClick={() => signIn(provider.id, { callbackUrl: "/auth/repository-selection" })}
               className={`flex items-center justify-center py-3 px-4 rounded-md w-full font-medium ${
                 provider.id === "github"
                   ? "bg-[#24292F] text-white"

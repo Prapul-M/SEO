@@ -168,6 +168,7 @@ export async function updateFile(
 ): Promise<any> {
   try {
     if (!session?.accessToken) {
+      console.error('No access token provided');
       throw new Error('Not authenticated');
     }
 
@@ -176,20 +177,42 @@ export async function updateFile(
     });
 
     // Apply SEO improvements to the content
+    console.log(`Applying SEO improvements to ${path}`);
     const improvedContent = applySeoImprovements(content, path);
     
+    // Log differences for debugging
+    if (improvedContent === content) {
+      console.log(`No changes made to ${path}`);
+    } else {
+      console.log(`Changes made to ${path}`);
+    }
+    
     // Update the file with improved content
-    const response = await octokit.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path,
-      message: commitMessage,
-      content: Buffer.from(improvedContent).toString('base64'),
-      sha,
-      branch,
-    });
-
-    return response.data;
+    try {
+      const response = await octokit.repos.createOrUpdateFileContents({
+        owner,
+        repo,
+        path,
+        message: commitMessage,
+        content: Buffer.from(improvedContent).toString('base64'),
+        sha,
+        branch,
+      });
+      
+      console.log(`Successfully updated ${path} in branch ${branch}`);
+      return response.data;
+    } catch (apiError: any) {
+      console.error(`GitHub API error updating ${path}:`, apiError.message);
+      
+      // Provide more specific error information
+      if (apiError.status === 409) {
+        throw new Error(`Conflict while updating ${path}. The file may have been modified elsewhere.`);
+      } else if (apiError.status === 422) {
+        throw new Error(`Validation failed for ${path}. There might be no changes or the branch might not exist.`);
+      } else {
+        throw new Error(`Failed to update ${path}: ${apiError.message}`);
+      }
+    }
   } catch (error) {
     console.error('Error updating file:', error);
     throw error;
@@ -233,73 +256,154 @@ export async function createPullRequest(
 
 // Helper function to apply SEO improvements to HTML content
 function applySeoImprovements(content: string, filePath: string): string {
-  // For now, this is a simplified example that makes basic improvements
-  // In a real implementation, this would use more sophisticated analysis
-
+  console.log(`Starting SEO improvements for ${filePath}`);
+  
   // Parse the HTML content
   let improvedContent = content;
+  let changes = 0;
 
   // Extract the filename from the path for title generation
   const fileName = filePath.split('/').pop()?.replace('.html', '') || 'Page';
   const pageTitle = fileName.split('-').map(word => 
     word.charAt(0).toUpperCase() + word.slice(1)
   ).join(' ');
+  
+  // Generate keywords based on the filename and path
+  const keywords = [
+    fileName.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim(), 
+    ...filePath.split('/').map(part => part.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim()),
+    'seo optimization',
+    'search engine visibility',
+    'website improvement'
+  ].filter(Boolean);
 
   // 1. Improve the title tag
-  improvedContent = improvedContent.replace(
-    /<title>(.*?)<\/title>/i,
-    `<title>${pageTitle} - SEO Optimized Content for Better Rankings</title>`
-  );
+  const titleRegex = /<title>(.*?)<\/title>/i;
+  const titleMatch = improvedContent.match(titleRegex);
+  if (titleMatch) {
+    const newTitle = `<title>${pageTitle} - SEO Optimized Content for Better Rankings</title>`;
+    improvedContent = improvedContent.replace(titleRegex, newTitle);
+    console.log(`Updated title: ${titleMatch[1]} -> ${pageTitle} - SEO Optimized Content for Better Rankings`);
+    changes++;
+  } else {
+    // Add title tag if missing
+    improvedContent = improvedContent.replace(
+      /<head>([\s\S]*?)/i,
+      `<head>$1\n  <title>${pageTitle} - SEO Optimized Content for Better Rankings</title>`
+    );
+    console.log(`Added missing title tag: ${pageTitle} - SEO Optimized Content for Better Rankings`);
+    changes++;
+  }
 
-  // 2. Add meta description if missing
-  if (!improvedContent.includes('<meta name="description"')) {
+  // 2. Add or improve meta description
+  const metaDescRegex = /<meta\s+name=["']description["']\s+content=["'](.*?)["']/i;
+  const metaDescMatch = improvedContent.match(metaDescRegex);
+  const newDesc = `Discover ${pageTitle} - Optimized for search engines with comprehensive information and solutions. Learn about ${keywords.slice(0, 3).join(', ')} and more.`;
+  
+  if (metaDescMatch) {
+    improvedContent = improvedContent.replace(metaDescRegex, `<meta name="description" content="${newDesc}">`);
+    console.log(`Updated meta description: ${metaDescMatch[1]} -> ${newDesc}`);
+    changes++;
+  } else {
+    // Add meta description if missing
     improvedContent = improvedContent.replace(
       /<head>([\s\S]*?)<\/head>/i,
-      `<head>$1
-    <meta name="description" content="Discover ${pageTitle} - Optimized for search engines with comprehensive information and solutions. Click now for the best experience!">
-  </head>`
+      `<head>$1\n  <meta name="description" content="${newDesc}">\n</head>`
     );
-  } else {
-    // Improve existing meta description
-    improvedContent = improvedContent.replace(
-      /<meta name="description" content="([^"]*)">/i,
-      `<meta name="description" content="Discover ${pageTitle} - Optimized for search engines with comprehensive information and solutions. Click now for the best experience!">`
-    );
+    console.log(`Added missing meta description: ${newDesc}`);
+    changes++;
   }
 
   // 3. Add meta keywords if missing
-  if (!improvedContent.includes('<meta name="keywords"')) {
+  const metaKeywordsRegex = /<meta\s+name=["']keywords["']\s+content=["'](.*?)["']/i;
+  const keywordsString = keywords.slice(0, 8).join(', ');
+  
+  if (!improvedContent.match(metaKeywordsRegex)) {
     improvedContent = improvedContent.replace(
       /<head>([\s\S]*?)<\/head>/i,
-      `<head>$1
-    <meta name="keywords" content="${pageTitle.toLowerCase()}, seo optimization, ${fileName.toLowerCase().replace('-', ' ')}, best practices">
-  </head>`
+      `<head>$1\n  <meta name="keywords" content="${keywordsString}">\n</head>`
     );
+    console.log(`Added meta keywords: ${keywordsString}`);
+    changes++;
   }
 
-  // 4. Improve H1 tags
-  improvedContent = improvedContent.replace(
-    /<h1>(.*?)<\/h1>/gi,
-    (match, p1) => {
-      // If H1 is too short, enhance it
-      if (p1.trim().length < 20) {
-        return `<h1>${p1} - Comprehensive Guide to Better SEO</h1>`;
+  // 4. Add cannonical link if missing
+  if (!improvedContent.includes('<link rel="canonical"')) {
+    improvedContent = improvedContent.replace(
+      /<head>([\s\S]*?)<\/head>/i,
+      `<head>$1\n  <link rel="canonical" href="https://example.com/${filePath}">\n</head>`
+    );
+    console.log(`Added canonical link`);
+    changes++;
+  }
+
+  // 5. Improve H1 tags or add if missing
+  const h1Regex = /<h1[^>]*>(.*?)<\/h1>/gi;
+  let h1Match;
+  const h1Matches = [];
+  
+  // Collect all H1 matches
+  while ((h1Match = h1Regex.exec(improvedContent)) !== null) {
+    h1Matches.push(h1Match);
+  }
+  
+  if (h1Matches.length > 0) {
+    // Improve existing H1 tags
+    h1Matches.forEach((match) => {
+      const originalH1 = match[1];
+      if (originalH1.trim().length < 20) {
+        const newH1 = `${originalH1} - Comprehensive Guide to Better SEO`;
+        improvedContent = improvedContent.replace(
+          `<h1>${originalH1}</h1>`,
+          `<h1>${newH1}</h1>`
+        );
+        console.log(`Updated H1: ${originalH1} -> ${newH1}`);
+        changes++;
       }
-      return match;
-    }
-  );
+    });
+  } else {
+    // Add H1 tag if missing, right after body tag
+    improvedContent = improvedContent.replace(
+      /<body[^>]*>([\s\S]*?)/i,
+      `<body>\n  <h1>${pageTitle} - Complete Guide</h1>$1`
+    );
+    console.log(`Added missing H1: ${pageTitle} - Complete Guide`);
+    changes++;
+  }
 
-  // 5. Add alt text to images without it
-  improvedContent = improvedContent.replace(
-    /<img(?!\s+alt=)[^>]*?src=["']([^"']*?)["'][^>]*?>/gi,
-    (match, src) => {
-      // Extract a descriptive name from the src attribute
-      const imageName = src.split('/').pop()?.split('.')[0] || 'image';
-      const descriptiveName = imageName.replace(/[-_]/g, ' ').replace(/\d+/g, '').trim();
-      return match.replace('<img', `<img alt="Detailed ${descriptiveName} for ${pageTitle}"`);
-    }
-  );
+  // 6. Add alt text to images without it
+  const imgRegex = /<img(?!\s+alt=)[^>]*?src=["']([^"']*?)["'][^>]*?>/gi;
+  let imgMatch;
+  const imgMatches = [];
+  
+  // Collect all img matches that don't have alt attribute
+  while ((imgMatch = imgRegex.exec(improvedContent)) !== null) {
+    imgMatches.push(imgMatch);
+  }
+  
+  imgMatches.forEach((match) => {
+    const originalImg = match[0];
+    const imgSrc = match[1];
+    const imageName = imgSrc.split('/').pop()?.split('.')[0] || 'image';
+    const descriptiveName = imageName.replace(/[-_]/g, ' ').replace(/\d+/g, '').trim() || pageTitle;
+    
+    const newImg = originalImg.replace('<img', `<img alt="Detailed ${descriptiveName} for ${pageTitle}"`);
+    improvedContent = improvedContent.replace(originalImg, newImg);
+    console.log(`Added alt text to image: ${imgSrc}`);
+    changes++;
+  });
 
+  // 7. Improve meta viewport if missing
+  if (!improvedContent.includes('<meta name="viewport"')) {
+    improvedContent = improvedContent.replace(
+      /<head>([\s\S]*?)<\/head>/i,
+      `<head>$1\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n</head>`
+    );
+    console.log(`Added meta viewport tag`);
+    changes++;
+  }
+  
+  console.log(`Made ${changes} SEO improvements to ${filePath}`);
   return improvedContent;
 }
 

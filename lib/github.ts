@@ -430,13 +430,20 @@ export async function getHtmlFiles(
       // If it's a directory, traverse it recursively
       if (Array.isArray(data)) {
         for (const item of data) {
-          if (item.type === "dir") {
+          if (item.type === "dir" && 
+              !item.path.includes("node_modules") && 
+              !item.path.includes(".git")) {
             await traverseDir(item.path);
-          } else if (
-            item.type === "file" &&
-            (item.name.endsWith(".html") || item.name.endsWith(".htm"))
-          ) {
+          } else if (item.type === "file" && (
+            item.name.endsWith(".html") || 
+            item.name.endsWith(".htm") || 
+            item.name.endsWith(".jsx") || 
+            item.name.endsWith(".tsx") ||
+            (item.name.endsWith(".js") && !item.name.endsWith(".min.js")) ||
+            (item.name.endsWith(".ts") && !item.name.endsWith(".d.ts"))
+          )) {
             htmlFiles.push(item.path);
+            console.log(`Found potential HTML-containing file: ${item.path}`);
           }
         }
       }
@@ -446,5 +453,17 @@ export async function getHtmlFiles(
   }
 
   await traverseDir(path);
-  return htmlFiles;
+  
+  // Log the files found
+  console.log(`Found ${htmlFiles.length} potential HTML files in the repository`);
+  
+  // For debugging, limit to a reasonable number of files for analysis
+  const maxFiles = process.env.MAX_FILES_PER_SCAN ? parseInt(process.env.MAX_FILES_PER_SCAN) : 5;
+  const limitedFiles = htmlFiles.slice(0, maxFiles);
+  
+  if (htmlFiles.length > maxFiles) {
+    console.log(`Limiting scan to ${maxFiles} files out of ${htmlFiles.length} total files found`);
+  }
+  
+  return limitedFiles;
 } 

@@ -303,106 +303,201 @@ export async function analyzeSeoWithAI(
     // Try to parse the response as JSON
     try {
       const parsedResult = JSON.parse(responseContent);
+      console.log("OpenAI response format:", Object.keys(parsedResult));
       
-      // Check if the response has the expected structure, and transform it if needed
-      if (parsedResult.score && 
-          (parsedResult.sections || parsedResult.issues) && 
-          (parsedResult.keywords || parsedResult.suggestedKeywords)) {
-        
-        // Handle different possible response structures
-        const sections = parsedResult.sections || 
-          (parsedResult.issues ? [{ name: "Issues", issues: parsedResult.issues }] : []);
-        
-        const keywords = parsedResult.keywords || 
-          { current: parsedResult.currentKeywords || [], suggested: parsedResult.suggestedKeywords || [] };
-        
-        return {
-          score: parsedResult.score,
-          sections: sections,
-          keywords: keywords
-        };
-      }
-      
-      // If the structure doesn't match what we expect, transform it into the right format
-      console.log("OpenAI response was in an unexpected format. Converting to expected structure.");
-      
-      // Extract issues from the response
-      const sections = [];
-      let headIssues: Array<{
-        type: string;
-        element: string;
-        issue: string;
-        suggestion: string;
-        severity: "low" | "medium" | "high";
-      }> = [];
-      let bodyIssues: Array<{
-        type: string;
-        element: string;
-        issue: string;
-        suggestion: string;
-        severity: "low" | "medium" | "high";
-      }> = [];
-      
-      // Try to extract issues based on common properties in the response
-      if (parsedResult.title || parsedResult.metaTags || parsedResult.description) {
-        if (parsedResult.title && parsedResult.title.issues) {
-          headIssues.push({
-            type: 'title',
-            element: `<title>${parsedResult.title.current || 'Unknown'}</title>`,
-            issue: parsedResult.title.issues,
-            suggestion: parsedResult.title.suggestions || 'Optimize your title tag',
-            severity: 'medium' as "medium"
-          });
-        }
-        
-        if (parsedResult.description && parsedResult.description.issues) {
-          headIssues.push({
-            type: 'meta',
-            element: `<meta name="description" content="${parsedResult.description.current || 'Unknown'}">`,
-            issue: parsedResult.description.issues,
-            suggestion: parsedResult.description.suggestions || 'Improve your meta description',
-            severity: 'medium' as "medium"
-          });
+      // Calculate a score - handle different formats
+      let score = 70; // Default score
+      if (typeof parsedResult.score === 'number') {
+        score = parsedResult.score;
+      } else if (typeof parsedResult.score === 'string') {
+        // Handle string scores like "Low", "Medium", "High"
+        if (parsedResult.score.toLowerCase() === 'low') {
+          score = 40;
+        } else if (parsedResult.score.toLowerCase() === 'medium') {
+          score = 60;
+        } else if (parsedResult.score.toLowerCase() === 'high') {
+          score = 80;
+        } else {
+          // Try to parse a number from the string
+          const parsedScore = parseInt(parsedResult.score);
+          if (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100) {
+            score = parsedScore;
+          }
         }
       }
       
-      // Add sections with the issues we extracted
-      if (headIssues.length > 0) {
-        sections.push({
-          name: 'Head Section',
-          issues: headIssues
+      // Handle different section formats
+      let sections = [];
+      
+      // Case 1: Standard format with "sections" array
+      if (Array.isArray(parsedResult.sections)) {
+        sections = parsedResult.sections.map((section: any) => {
+          // Handle different issue formats
+          let issues = [];
+          if (Array.isArray(section.issues)) {
+            issues = section.issues.map((issue: any) => {
+              if (typeof issue === 'string') {
+                // Convert string issues to objects
+                return {
+                  type: section.name || section.section || 'general',
+                  element: issue.includes('<') && issue.includes('>') ? issue : '<element>',
+                  issue: issue,
+                  suggestion: Array.isArray(section.suggestions) ? section.suggestions[0] : 'Improve this element',
+                  severity: 'medium' as "low" | "medium" | "high"
+                };
+              } else {
+                // Handle object issues
+                return {
+                  type: issue.type || section.name || section.section || 'general',
+                  element: issue.element || '<element>',
+                  issue: issue.issue || issue.description || issue.details || issue,
+                  suggestion: issue.suggestion || issue.recommendations || issue.fix || 'Improve this element',
+                  severity: (issue.severity || 'medium') as "low" | "medium" | "high"
+                };
+              }
+            });
+          } else if (typeof section.issues === 'object' && !Array.isArray(section.issues)) {
+            // Handle case where issues is an object with keys
+            issues = Object.entries(section.issues).map(([key, value]) => ({
+              type: key,
+              element: '<element>',
+              issue: value as string,
+              suggestion: Array.isArray(section.suggestions) ? section.suggestions[0] : 'Improve this element',
+              severity: 'medium' as "low" | "medium" | "high"
+            }));
+          }
+          
+          return {
+            name: section.name || section.section || 'General',
+            issues
+          };
+        });
+      }
+      // Case 2: Format with section.issues and section.suggestions arrays
+      else if (parsedResult.section && Array.isArray(parsedResult.section.issues) && Array.isArray(parsedResult.section.suggestions)) {
+        const issues = parsedResult.section.issues.map((issue: any, index: number) => ({
+          type: 'general',
+          element: '<element>',
+          issue: issue,
+          suggestion: parsedResult.section.suggestions[index] || 'Improve this element',
+          severity: 'medium' as "low" | "medium" | "high"
+        }));
+        
+        sections = [{
+          name: 'SEO Issues',
+          issues
+        }];
+      }
+      // Case 3: Format with top-level issues and suggestions arrays
+      else if (Array.isArray(parsedResult.issues) && Array.isArray(parsedResult.suggestions)) {
+        const issues = parsedResult.issues.map((issue: any, index: number) => ({
+          type: 'general',
+          element: '<element>',
+          issue: issue,
+          suggestion: parsedResult.suggestions[index] || 'Improve this element',
+          severity: 'medium' as "low" | "medium" | "high"
+        }));
+        
+        sections = [{
+          name: 'SEO Issues',
+          issues
+        }];
+      }
+      // Case 4: Format with sections object where each key is a section name
+      else if (parsedResult.sections && typeof parsedResult.sections === 'object' && !Array.isArray(parsedResult.sections)) {
+        sections = Object.entries(parsedResult.sections).map(([sectionName, sectionData]) => {
+          const sectionObj = sectionData as any;
+          let issues = [];
+          
+          if (Array.isArray(sectionObj.issues)) {
+            issues = sectionObj.issues.map((issue: any, index: number) => {
+              if (typeof issue === 'string') {
+                return {
+                  type: sectionName.toLowerCase(),
+                  element: '<element>',
+                  issue: issue,
+                  suggestion: Array.isArray(sectionObj.suggestions) ? sectionObj.suggestions[index] : 'Improve this element',
+                  severity: 'medium' as "low" | "medium" | "high"
+                };
+              } else {
+                return {
+                  type: issue.type || sectionName.toLowerCase(),
+                  element: issue.element || '<element>',
+                  issue: issue.issue || issue.description || issue.details || issue,
+                  suggestion: issue.suggestion || issue.recommendations || issue.fix || 'Improve this element',
+                  severity: (issue.severity || 'medium') as "low" | "medium" | "high"
+                };
+              }
+            });
+          }
+          
+          return {
+            name: sectionName,
+            issues
+          };
         });
       }
       
-      if (bodyIssues.length > 0) {
-        sections.push({
-          name: 'Body Section',
-          issues: bodyIssues
-        });
-      }
-      
-      // If we couldn't extract structured issues, create a generic issue
+      // If we couldn't extract sections, try to extract standalone issues
       if (sections.length === 0) {
-        sections.push({
+        sections = extractSectionsFromGenericResponse(parsedResult);
+      }
+      
+      // Ensure we have at least one section with issues
+      if (sections.length === 0 || sections.every((s: any) => s.issues.length === 0)) {
+        sections = [{
           name: 'SEO Analysis',
           issues: [{
             type: 'general',
             element: '<html>...</html>',
-            issue: 'AI analysis finished but returned in an unexpected format',
-            suggestion: parsedResult.suggestions || 'Review the analysis and apply recommended changes',
-            severity: 'medium' as "medium"
+            issue: 'AI analysis detected SEO improvements needed',
+            suggestion: parsedResult.suggestions ? 
+              (Array.isArray(parsedResult.suggestions) ? parsedResult.suggestions[0] : parsedResult.suggestions) 
+              : 'Review the content and implement SEO best practices',
+            severity: 'medium' as "low" | "medium" | "high"
           }]
-        });
+        }];
       }
       
-      // Calculate a score or use the one provided
-      const score = parsedResult.score || 70;
-      
-      // Extract or create keywords
-      const keywords = {
-        current: parsedResult.currentKeywords || parsedResult.keywords?.current || [],
-        suggested: parsedResult.suggestedKeywords || parsedResult.keywords?.suggested || []
+      // Handle keywords in different formats
+      let keywords: {
+        current: string[];
+        suggested: string[];
+      } = {
+        current: [],
+        suggested: []
       };
+      
+      if (parsedResult.keywords) {
+        if (Array.isArray(parsedResult.keywords)) {
+          // Simple array of keywords
+          keywords.suggested = parsedResult.keywords;
+        } else if (typeof parsedResult.keywords === 'object') {
+          // Object with current and suggested
+          keywords.current = parsedResult.keywords.current || parsedResult.keywords.existing || [];
+          keywords.suggested = parsedResult.keywords.suggested || parsedResult.keywords.recommended || [];
+        }
+      } else if (parsedResult.suggestedKeywords) {
+        // Direct suggestedKeywords array
+        keywords.suggested = parsedResult.suggestedKeywords;
+        if (parsedResult.currentKeywords) {
+          keywords.current = parsedResult.currentKeywords;
+        }
+      }
+      
+      // Ensure arrays even if they were provided as strings
+      if (typeof keywords.current === 'string') {
+        keywords.current = (keywords.current as unknown as string).split(/,\s*/);
+      }
+      if (typeof keywords.suggested === 'string') {
+        keywords.suggested = (keywords.suggested as unknown as string).split(/,\s*/);
+      }
+      
+      // Ensure they're always arrays
+      if (!Array.isArray(keywords.current)) keywords.current = [];
+      if (!Array.isArray(keywords.suggested)) keywords.suggested = [];
+      
+      console.log(`SEO Analysis for ${filePath}: Score=${score}, Sections=${sections.length}, Issues=${sections.reduce((sum: number, s: any) => sum + s.issues.length, 0)}`);
       
       return {
         score,
@@ -569,4 +664,54 @@ function getMockSeoAnalysis(filePath: string, htmlContent: string): SeoAnalysisR
       ]
     }
   };
+}
+
+// Helper function to extract sections from generic response formats
+function extractSectionsFromGenericResponse(parsedResult: any): Array<{
+  name: string;
+  issues: Array<{
+    type: string;
+    element: string;
+    issue: string;
+    suggestion: string;
+    severity: 'low' | 'medium' | 'high';
+  }>;
+}> {
+  const sections = [];
+  
+  // Try to find issues in various parts of the response
+  if (parsedResult.title || parsedResult.metaDescription || parsedResult.headings) {
+    const issues = [];
+    
+    // Title issues
+    if (parsedResult.title) {
+      issues.push({
+        type: 'title',
+        element: `<title>${typeof parsedResult.title === 'string' ? parsedResult.title : 'Current Title'}</title>`,
+        issue: 'Title may need optimization',
+        suggestion: 'Update the title to be more descriptive and include keywords',
+        severity: 'medium' as const
+      });
+    }
+    
+    // Meta description issues
+    if (parsedResult.metaDescription === '' || parsedResult.metaDescription === false) {
+      issues.push({
+        type: 'meta',
+        element: '<meta name="description" content="">',
+        issue: 'Missing meta description',
+        suggestion: 'Add a descriptive meta description with keywords',
+        severity: 'high' as const
+      });
+    }
+    
+    if (issues.length > 0) {
+      sections.push({
+        name: 'Head Section',
+        issues
+      });
+    }
+  }
+  
+  return sections;
 } 

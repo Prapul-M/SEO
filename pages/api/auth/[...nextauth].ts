@@ -41,21 +41,29 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
   ],
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
-    async jwt({ token, account }) {
-      // Persist the OAuth access_token to the token right after signin
-      if (account) {
-        token.accessToken = account.access_token;
+    async jwt({ token, account, user }) {
+      // Initial sign in
+      if (account && user) {
+        return {
+          ...token,
+          accessToken: account.access_token,
+          uid: user.id,
+        };
       }
       return token;
     },
     async session({ session, token }) {
-      // Send properties to the client, like an access_token from a provider.
-      session.accessToken = token.accessToken;
+      // Send properties to the client
+      if (token && session.user) {
+        session.accessToken = token.accessToken as string;
+        session.user.id = token.uid as string;
+      }
       return session;
     },
   },
@@ -73,6 +81,7 @@ export const authOptions: NextAuthOptions = {
       console.log('User signed in:', user.name);
     },
   },
+  secret: process.env.NEXTAUTH_SECRET || "This_should_be_changed_in_production", // Add a strong secret in production
 };
 
 export default NextAuth(authOptions); 

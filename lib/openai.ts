@@ -254,16 +254,170 @@ function createSeoAnalysisPrompt(
 }
 
 /**
- * Analyze HTML content for SEO improvements (mock implementation)
+ * Analyze HTML content for SEO improvements
  */
 export async function analyzeSeoWithAI(
   htmlContent: string,
   filePath: string
 ): Promise<SeoAnalysisResult> {
-  console.log(`Analyzing SEO for ${filePath} (mock implementation)`);
+  if (!process.env.OPENAI_API_KEY) {
+    console.log(`Analyzing SEO for ${filePath} (mock implementation)`);
+    // For demo purposes, we're using a mock implementation when no API key is provided
+    return getMockSeoAnalysis(filePath, htmlContent);
+  }
   
-  // For demo purposes, we're using a mock implementation
-  return getMockSeoAnalysis(filePath, htmlContent);
+  console.log(`Analyzing SEO for ${filePath} with OpenAI API`);
+  
+  try {
+    // Extract a URL from the file path for the prompt
+    const url = `https://example.com/${filePath}`;
+    
+    // Extract basic SEO elements from HTML
+    const elements = extractSeoElements(htmlContent);
+    
+    // Create a suitable prompt for the analysis
+    const prompt = createSeoAnalysisPrompt(url, elements);
+    
+    // Make the API call to OpenAI
+    const completion = await openai!.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "You are an SEO expert analyzing HTML content. Provide detailed feedback on SEO issues and optimization suggestions."
+        },
+        {
+          role: "user",
+          content: `Analyze this HTML file ${filePath}:\n\n${htmlContent.substring(0, 10000)}\n\nProvide a comprehensive SEO analysis with specific issues and improvement suggestions.`
+        }
+      ],
+      temperature: 0.5,
+      response_format: { type: "json_object" }
+    });
+    
+    const responseContent = completion.choices[0].message.content;
+    if (!responseContent) {
+      throw new Error("No response from OpenAI");
+    }
+    
+    // Try to parse the response as JSON
+    try {
+      const parsedResult = JSON.parse(responseContent);
+      
+      // Check if the response has the expected structure, and transform it if needed
+      if (parsedResult.score && 
+          (parsedResult.sections || parsedResult.issues) && 
+          (parsedResult.keywords || parsedResult.suggestedKeywords)) {
+        
+        // Handle different possible response structures
+        const sections = parsedResult.sections || 
+          (parsedResult.issues ? [{ name: "Issues", issues: parsedResult.issues }] : []);
+        
+        const keywords = parsedResult.keywords || 
+          { current: parsedResult.currentKeywords || [], suggested: parsedResult.suggestedKeywords || [] };
+        
+        return {
+          score: parsedResult.score,
+          sections: sections,
+          keywords: keywords
+        };
+      }
+      
+      // If the structure doesn't match what we expect, transform it into the right format
+      console.log("OpenAI response was in an unexpected format. Converting to expected structure.");
+      
+      // Extract issues from the response
+      const sections = [];
+      let headIssues: Array<{
+        type: string;
+        element: string;
+        issue: string;
+        suggestion: string;
+        severity: "low" | "medium" | "high";
+      }> = [];
+      let bodyIssues: Array<{
+        type: string;
+        element: string;
+        issue: string;
+        suggestion: string;
+        severity: "low" | "medium" | "high";
+      }> = [];
+      
+      // Try to extract issues based on common properties in the response
+      if (parsedResult.title || parsedResult.metaTags || parsedResult.description) {
+        if (parsedResult.title && parsedResult.title.issues) {
+          headIssues.push({
+            type: 'title',
+            element: `<title>${parsedResult.title.current || 'Unknown'}</title>`,
+            issue: parsedResult.title.issues,
+            suggestion: parsedResult.title.suggestions || 'Optimize your title tag',
+            severity: 'medium' as "medium"
+          });
+        }
+        
+        if (parsedResult.description && parsedResult.description.issues) {
+          headIssues.push({
+            type: 'meta',
+            element: `<meta name="description" content="${parsedResult.description.current || 'Unknown'}">`,
+            issue: parsedResult.description.issues,
+            suggestion: parsedResult.description.suggestions || 'Improve your meta description',
+            severity: 'medium' as "medium"
+          });
+        }
+      }
+      
+      // Add sections with the issues we extracted
+      if (headIssues.length > 0) {
+        sections.push({
+          name: 'Head Section',
+          issues: headIssues
+        });
+      }
+      
+      if (bodyIssues.length > 0) {
+        sections.push({
+          name: 'Body Section',
+          issues: bodyIssues
+        });
+      }
+      
+      // If we couldn't extract structured issues, create a generic issue
+      if (sections.length === 0) {
+        sections.push({
+          name: 'SEO Analysis',
+          issues: [{
+            type: 'general',
+            element: '<html>...</html>',
+            issue: 'AI analysis finished but returned in an unexpected format',
+            suggestion: parsedResult.suggestions || 'Review the analysis and apply recommended changes',
+            severity: 'medium' as "medium"
+          }]
+        });
+      }
+      
+      // Calculate a score or use the one provided
+      const score = parsedResult.score || 70;
+      
+      // Extract or create keywords
+      const keywords = {
+        current: parsedResult.currentKeywords || parsedResult.keywords?.current || [],
+        suggested: parsedResult.suggestedKeywords || parsedResult.keywords?.suggested || []
+      };
+      
+      return {
+        score,
+        sections,
+        keywords
+      };
+    } catch (parseError) {
+      console.error("Failed to parse OpenAI response as JSON:", parseError);
+      return getMockSeoAnalysis(filePath, htmlContent);
+    }
+  } catch (error) {
+    console.error("Error in OpenAI SEO analysis:", error);
+    // Fall back to mock implementation if there's an error
+    return getMockSeoAnalysis(filePath, htmlContent);
+  }
 }
 
 /**

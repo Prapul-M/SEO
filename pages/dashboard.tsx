@@ -145,6 +145,11 @@ export default function Dashboard() {
     setEmailSent(false);
     
     try {
+      // Log whether we're using real AI or mock data
+      console.log('SEO Analysis Mode:', process.env.OPENAI_API_KEY ? 'REAL AI' : 'MOCK DATA');
+      console.log('API Key exists:', !!process.env.OPENAI_API_KEY);
+      console.log('API Key length:', process.env.OPENAI_API_KEY?.length);
+      
       // Create mock data for demo purposes
       const mockScanResults = {
         projectId: project.id,

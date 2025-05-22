@@ -284,11 +284,11 @@ export async function analyzeSeoWithAI(
       messages: [
         {
           role: "system",
-          content: "You are an SEO expert analyzing HTML content. Provide detailed feedback on SEO issues and optimization suggestions."
+          content: "You are an SEO expert analyzing HTML content. Provide detailed feedback on SEO issues and optimization suggestions. Format your response as JSON."
         },
         {
           role: "user",
-          content: `Analyze this HTML file ${filePath}:\n\n${htmlContent.substring(0, 10000)}\n\nProvide a comprehensive SEO analysis with specific issues and improvement suggestions.`
+          content: `Analyze this HTML file ${filePath}:\n\n${htmlContent.substring(0, 10000)}\n\nProvide a comprehensive SEO analysis with specific issues and improvement suggestions. Return your analysis as a JSON object with fields for score, sections with issues, and keywords.`
         }
       ],
       temperature: 0.5,
